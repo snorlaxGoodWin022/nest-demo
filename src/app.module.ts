@@ -5,9 +5,16 @@ import { DemoModule } from './demo/demo.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PostModule } from './post/post.module';
 import { UserModule } from './user/user.module';
+import { ModelsModule } from './models/models.module';
+import { PromptsModule } from './prompts/prompts.module';
+import { ChainsModule } from './chains/chains.module';
+import { AgentsModule } from './agents/agents.module';
+import { MemoryModule } from './memory/memory.module';
+import { RagModule } from './rag/rag.module';
+import { FunctionCallingModule } from './function-calling/function-calling.module';
 
 @Module({
-  imports: [DemoModule, PrismaModule, PostModule, UserModule],
+  imports: [DemoModule, PrismaModule, PostModule, UserModule, ModelsModule, PromptsModule, ChainsModule, AgentsModule, MemoryModule, RagModule, FunctionCallingModule],
   controllers: [AppController],
   providers: [AppService],
 })
