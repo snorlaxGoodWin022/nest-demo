@@ -1,18 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { config } from '../config';
-import { ChatOllama } from '@langchain/ollama';
+// import { ChatOpenAI } from '@langchain/openai'; // [Ollama] 原始代码
+import { ChatOpenAI } from '@langchain/openai'; // [Llama.cpp] llama-server HTTP 服务（与 Ollama API 兼容）
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Response } from 'express';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 
 @Injectable()
 export class ModelsService {
-  //创建chatOllama实例
-  private llm = new ChatOllama({
-    model: config.ollama.chatModel,
-    baseUrl: config.ollama.baseUrl,
-    temperature: config.ollama.temperature,
-    think: false, //是否开启思考模式，开启后模型会在生成回答前先输出思考过程，适合调试和分析模型行为
+  // [Llama.cpp] 使用本地 llama-server.exe 启动的 HTTP 服务
+  // 服务地址：http://localhost:8081
+  // 模型：Llama-3.2-1B-Instruct-Q4_K_M
+  private llm = new ChatOpenAI({
+    model: config.llamaCpp.chatModel,
+    openAIApiKey: 'not-needed',
+    configuration: {
+      baseURL: config.llamaCpp.baseUrl,
+    },
+    temperature: config.llamaCpp.temperature,
   });
 
   //方式一：基础调用（等待完整回答）
