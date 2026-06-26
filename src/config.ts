@@ -3,22 +3,23 @@ export const config = {
   // ── 原有配置（不动）─────────────────────────────────────
   // 如果原项目有 server、chroma 等配置，保留在这里
 
-  // ── 新增：Ollama / LangChain 配置 ───────────────────────
-  ollama: {
-    // Ollama 服务地址，默认本机 11434 端口
-    baseUrl: 'http://localhost:11434',
-    // 对话模型：qwen3.5:0.8b（约 1GB）
-    chatModel: 'qwen3.5:0.8b',
+  // ── Ollama / LangChain 配置（已禁用，改用 llama.cpp）────────────
+  // ollama: {
+  //   baseUrl: 'http://localhost:11434',
+  //   chatModel: 'qwen3.5:0.8b',
+  //   embedModel: 'mxbai-embed-large',
+  //   temperature: 0.3,
+  // },
 
-    // 向量化模型：mxbai-embed-large（RAG 检索用，约 669MB）
-    // 拉取命令：ollama pull mxbai-embed-large
-    embedModel: 'mxbai-embed-large',
-
-    // 温度参数（0~1）
-    // 0   = 最保守，每次输出几乎相同，适合问答/代码
-    // 0.3 = 稍有变化，适合大多数场景
-    // 0.7 = 较有创意，适合写作
-    // 1.0 = 最随机，适合头脑风暴
+  // ── Llama.cpp 配置 ──────────────────────────────────────
+  // 使用本地 llama-server.exe 启动的 HTTP 服务（OpenAI 兼容 API）
+  llamaCpp: {
+    // Llama-3.2 对话模型 — llama-server 启动在 8081
+    baseUrl: 'http://localhost:8081/v1',
+    chatModel: 'D:/softIT/llama.cpp/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    // Embedding 模型 — 独立的 llama-server 启动在 8082
+    embedBaseUrl: 'http://localhost:8082/v1',
+    embedModel: 'D:/softIT/llama.cpp/mxbai-embed-large-v1.Q5_K_M.gguf',
     temperature: 0.3,
   },
 };
