@@ -1,15 +1,34 @@
 // src/function-calling/function-calling.service.ts
-
-import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
-import { tool, DynamicStructuredTool } from '@langchain/core/tools';
-import { z } from 'zod';
+//function-calling.service.ts 演示"LLM 能调用函数"这个能力本身
+/**
+┌─────────────────────────────────────────────────────────────┐
+│ Function Calling 的本质 = Agent 的 "最小可行实现"          │
+│                                                             │
+│ 共同点：                                                    │
+│   1. 定义工具（tool + schema）                              │
+│   2. bindTools 注册到 LLM                                   │
+│   3. 循环检测 tool_calls                                    │
+│   4. 执行工具 + 回传 ToolMessage                            │
+│   5. 直到 tool_calls 为空 → 返回最终回答                    │
+│                                                             │
+│ 不同点：                                                    │
+│   Agent 加了：SystemMessage、步骤追踪、错误处理、内容提取   │
+│                                                             │
+│ 学习策略：                                                  │
+│   如果已经理解 Agent → Function Calling 只需"差异学习"      │
+│   重点不是抄代码，而是理解"哪些是核心，哪些是装饰"          │
+└─────────────────────────────────────────────────────────────┘
+ */
 import {
+  AIMessage,
+  BaseMessage,
   HumanMessage,
   ToolMessage,
-  BaseMessage,
-  AIMessage,
 } from '@langchain/core/messages';
+import { DynamicStructuredTool, tool } from '@langchain/core/tools';
+import { ChatOpenAI } from '@langchain/openai';
+import { Injectable } from '@nestjs/common';
+import { z } from 'zod';
 import { config } from '../config';
 
 interface ToolCall {

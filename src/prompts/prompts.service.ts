@@ -1,13 +1,13 @@
 import { ChatOpenAI } from '@langchain/openai'; // [Llama.cpp] llama-server HTTP 服务（与 Ollama API 兼容）
 // import { ChatOpenAI } from '@langchain/openai'; // [Ollama] 原始代码
-import { Injectable } from '@nestjs/common';
-import { config } from 'src/config';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import {
   ChatPromptTemplate,
   FewShotPromptTemplate,
   PromptTemplate,
 } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import { Injectable } from '@nestjs/common';
+import { config } from 'src/config';
 
 /**
  * PromptsService - 提示词模板服务
@@ -51,96 +51,55 @@ export class PromptsService {
   // 模型：Llama-3.2-1B-Instruct-Q4_K_M
   private llm = new ChatOpenAI({
     model: config.llamaCpp.chatModel,
-    openAIApiKey: 'not-needed',
+    apiKey: 'not-needed',
     configuration: {
       baseURL: config.llamaCpp.baseUrl,
     },
     temperature: config.llamaCpp.temperature,
   });
 
-  //── ChatPromptTemplate：多消息对话模板（最常用）
-
-  /**
-   * translate - 翻译方法
-   *
-   * 实现原理：
-   * 1. 使用 ChatPromptTemplate 创建双角色提示词
-   * 2. system 角色设定翻译为专业翻译
-   * 3. human 角色提供要翻译的内容和目标语言
-   * 4. 通过管道 (.pipe) 连接 LLM 和输出解析器
-   * 5. invoke() 执行并返回结果
-   *
-   * @param text - 要翻译的原文
-   * @param targetLanguage - 目标语言
-   * @returns 包含原文、目标语言、翻译结果的响应
-   */
+  // ChatPromptTemplate：多消息对话模板（最常用）
   async translate(text: string, targetLanguage: string) {
-    // ========== 创建翻译提示词 ==========
     // ChatPromptTemplate.fromMessages() 创建对话格式的提示词
     // 消息数组格式：[角色, 内容]
     // {targetLang} 和 {text} 是变量占位符
     const prompt = ChatPromptTemplate.fromMessages([
-      // system 角色：设定 AI 的身份和行为
       ['system', '你是专业翻译，只输出翻译结果，不加任何解释。'],
-      // human 角色：用户的实际请求
       ['human', '请把以下内容翻译成{targetLang}：\n\n{text}'],
     ]);
 
     // ========== 构建处理链 ==========
     // prompt.pipe(llm).pipe(parser)
     // 含义：提示词 → LLM处理 → 字符串解析
-    // .pipe() 是管道操作，连接各个处理步骤
     const chain = prompt.pipe(this.llm).pipe(new StringOutputParser());
-
-    // ========== 执行翻译 ==========
-    // invoke() 方法会：
-    // 1. 将参数 {text, targetLanguage} 填充到提示词模板
-    // 2. 将填充后的提示词发送给 LLM
-    // 3. 解析 LLM 的返回结果
     const result = await chain.invoke({ text, targetLanguage });
-
-    // 返回结构化结果
     return { origin: text, targetLanguage, translated: result };
   }
 
   //单对话模型--总结
-
   /**
-   * summarize - 总结方法
-   *
-   * 实现原理：
-   * 1. 使用 system 角色设定字数限制
-   * 2. 将用户文本作为要总结的内容
-   * 3. LLM 会压缩内容并控制在指定字数内
-   *
+   * summarize - 总结内容
+   * 实现原理：使用 system 角色设定字数限制,将用户文本作为要总结的内容, LLM 会压缩内容并控制在指定字数内
    * @param text - 要总结的原文
    * @param maxWords - 最大字数限制
    * @returns 包含原文、字数限制、总结结果的响应
    */
   async summarize(text: string, maxWords: number) {
-    // ========== 创建总结提示词 ==========
     // {maxWords} 和 {text} 是变量占位符
     const prompt = ChatPromptTemplate.fromMessages([
       ['system', '用不超过{maxWords}个字总结以下内容，只输出总结：\n\n{text}'],
     ]);
 
-    // ========== 构建处理链并执行 ==========
     const chain = prompt.pipe(this.llm).pipe(new StringOutputParser());
     const result = await chain.invoke({ text, maxWords });
-
-    // 返回结构化结果
     return { origin: text, maxWords: maxWords, summarize: result };
   }
 
-  //少样本学习模版
-
+  //少样本学习模版 Few-Shot Learning
   /**
    * classify - 文本分类方法（情感分析）
-   *
    * 实现原理：Few-Shot Learning（少样本学习）
-   * ======================================
-   * 通过提供少量示例（examples），让模型理解任务模式，
-   * 无需额外训练即可提升分类准确性。
+   * 通过提供少量示例（examples），让模型理解任务模式，无需额外训练即可提升分类准确性。
    *
    * FewShotPromptTemplate 结构：
    * - prefix：任务说明前缀
@@ -172,16 +131,10 @@ export class PromptsService {
       { input: '强烈推荐！超出预期', output: '正面' },
       { input: '很失望，不会再买了', output: '负面' },
     ];
-
-    // ========== 创建示例格式化模板 ==========
-    // PromptTemplate 用于格式化单个示例
-    // {input} 和 {output} 会被替换为示例的值
     const examplePrompt = PromptTemplate.fromTemplate(
       '输入{input},\n输出{output}',
     );
-
     // ========== 创建 Few-Shot 模板 ==========
-    // FewShotPromptTemplate 组合所有示例
     const fewShotTemplate = new FewShotPromptTemplate({
       examples, // 示例数组
       examplePrompt, // 示例格式化模板
@@ -189,38 +142,25 @@ export class PromptsService {
       suffix: '输入{input},\n输出', // 最终输入的后缀
       inputVariables: ['input'], // 输入变量名
     });
-
-    // ========== 格式化并执行 ==========
     // .format() 将模板转换为可发送的提示词字符串
     const formattedPrompt = await fewShotTemplate.format({ input: text });
     const response = await this.llm.invoke(formattedPrompt);
-
-    // 返回结果
     return { input: text, output: response.content };
   }
 
   //用大模型来codereview,输入一段代码和编程语言，返回代码建议
-
   /**
    * codeReview - 代码审查方法
-   *
    * 实现原理：
    * 1. 使用 system 角色设定为资深开发工程师
    * 2. 指定审查维度和输出格式
    * 3. 使用 markdown 代码块格式化输入代码
    * 4. LLM 返回结构化的审查意见
-   *
-   * @param code - 要审查的代码
-   * @param language - 编程语言
-   * @returns 包含语言、代码、审查结果的响应
    */
   async codeReview(code: string, language: string) {
-    // ========== 创建代码审查提示词 ==========
-    // 使用模板字符串灵活插入语言参数
     const prompt = ChatPromptTemplate.fromMessages([
       [
         'system',
-
         `你是资深{language}开发工程师，负责代码审查。审查维度：代码规范 / 潜在 Bug / 性能问题 / 改进建议输出格式：总体评分（1-10分）+ 具体问题列表 + 改进代码片段`,
       ],
       ['human', '请审查以下{language}代码：\n\n```{language}\n{code}\n```'],
@@ -229,8 +169,6 @@ export class PromptsService {
     // ========== 构建处理链并执行 ==========
     const chain = prompt.pipe(this.llm).pipe(new StringOutputParser());
     const result = await chain.invoke({ code, language });
-
-    // 返回审查结果
     return { language, code, review: result };
   }
 }

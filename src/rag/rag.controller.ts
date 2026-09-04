@@ -1,8 +1,8 @@
 // src/rag/rag.controller.ts
 
-import { Controller, Post, Get, Delete, Body } from '@nestjs/common';
-import { RagService } from './rag.service';
+import { Body, Controller, Delete, Get, Post } from '@nestjs/common';
 import { IsArray, IsOptional, IsString } from 'class-validator';
+import { RagService } from './rag.service';
 
 class LoadDocumentsDto {
   @IsArray()
@@ -34,7 +34,7 @@ export class RagController {
     return this.ragService.loadDocuments(body.documents);
   }
 
-  @Post('search')
+  @Post('search') //纯向量检索（不调用大模型，直接看检索结果）
   search(@Body() body: SearchDto) {
     return this.ragService.search(body.query, body.topK);
   }
@@ -44,12 +44,12 @@ export class RagController {
     return this.ragService.query(body.question, body.topK);
   }
 
-  @Get('status')
+  @Get('status') //获取状态
   getStatus() {
     return this.ragService.getStatus();
   }
 
-  @Delete('clear')
+  @Delete('clear') //清除
   clearKnowledge() {
     return this.ragService.clearKnowledge();
   }

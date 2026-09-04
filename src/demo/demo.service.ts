@@ -8,12 +8,14 @@ export class DemoService {
     { id: '1', name: '林看卡', age: 30, email: 'Linkaka@example.com' },
     { id: '2', name: '小明', age: 25, email: 'xiaoming@example.com' },
   ];
+
   getHello() {
     return {
       message: '我是一个demo服务',
       time: new Date().toLocaleString(),
     };
   }
+
   createUser(dto: CreateUserDto) {
     return {
       message: '用户创建成功',
@@ -25,6 +27,7 @@ export class DemoService {
       },
     };
   }
+
   getUserById(id: string) {
     return {
       message: '用户查询成功',
@@ -37,6 +40,7 @@ export class DemoService {
       },
     };
   }
+
   getList(page: number, size: number) {
     const currentPage = page || 1;
     const pageSize = size || 10;
@@ -50,6 +54,7 @@ export class DemoService {
       },
     };
   }
+
   updateUser(id: string, dto: CreateUserDto) {
     const userIndex = this.users.findIndex((user) => user.id === id);
     if (userIndex === -1) {
@@ -66,6 +71,7 @@ export class DemoService {
       data: this.users[userIndex],
     };
   }
+
   deleteUser(id: string) {
     const userIndex = this.users.findIndex((user) => user.id === id);
     if (userIndex === -1) {

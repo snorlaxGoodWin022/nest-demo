@@ -1,20 +1,18 @@
 // src/rag/rag.service.ts
 
-import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import { Document } from '@langchain/core/documents';
 import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
+import { Document } from '@langchain/core/documents';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { Injectable } from '@nestjs/common';
 import { config } from '../config';
 
 @Injectable()
 export class RagService {
   // ── 模型初始化 ────────────────────────────────────────
   // 对话模型：RAG 场景用低温度，让回答更严格
-
   private llm = new ChatOpenAI({
     model: config.llamaCpp.chatModel,
     temperature: config.llamaCpp.temperature,
@@ -25,7 +23,6 @@ export class RagService {
   });
 
   // 向量化模型：把文本转成数字向量（用于相似度比较）
-
   private embeddings = new OpenAIEmbeddings({
     model: config.llamaCpp.embedModel,
     apiKey: 'not-needed', // 添加这一行，本地服务不需要真实 Key
@@ -41,7 +38,6 @@ export class RagService {
   // ── 加载文档到向量库 ───────────────────────────────────
   /**
    * 将文档加载到向量知识库中
-   *
    * 处理流程：
    * 1. 使用 RecursiveCharacterTextSplitter 将长文档切分成小块
    *    - chunkSize: 每个块的最大字符数（500）
@@ -105,9 +101,8 @@ export class RagService {
     };
   }
 
-  // ── 纯向量检索（不过大模型，直接看检索结果）──────────
+  // ── 纯向量检索（不调用大模型，直接看检索结果）──────────
   /**
-   * 仅执行向量相似度检索，不调用大模型
    * 用于调试或查看最相关的文档块有哪些
    *
    * 检索原理（余弦相似度）：
@@ -145,8 +140,6 @@ export class RagService {
 
   // ── 完整 RAG 问答 ─────────────────────────────────────
   /**
-   * 完整的 RAG（Retrieval-Augmented Generation）问答流程
-   *
    * RAG 流程说明：
    * - RAG = 检索（Retrieval）+ 生成（Generation）
    * - 核心思想：让大模型基于知识库中的真实内容回答，而非依赖模型内部知识
@@ -195,16 +188,6 @@ export class RagService {
       .join('\n\n');
 
     // ── 步骤3：构建 RAG Prompt ──────────────────────────
-    // 使用 ChatPromptTemplate 构建带 system 和 human 消息的 Prompt
-    //
-    // system 消息（系统指令）：
-    //   - 明确角色定位：知识库问答助手
-    //   - 严格规则：只能基于参考资料回答，不能使用外部知识
-    //   - 空结果处理：资料没有相关信息时，明确告知用户
-    //
-    // human 消息（用户问题）：
-    //   - 模板变量 {question} 将被用户实际问题替换
-    //   - 模板变量 {context} 将被检索到的文档内容替换
     const prompt = ChatPromptTemplate.fromMessages([
       [
         'system',
@@ -221,17 +204,6 @@ export class RagService {
     ]);
 
     // ── 步骤4：调用大模型生成回答 ───────────────────────
-    // LangChain 的 Pipe 模式（|）将各组件串联成处理链：
-    //   prompt → llm → StringOutputParser
-    //
-    // chain.invoke() 内部执行流程：
-    //   a) prompt.invoke({ context, question }) → 生成完整的 Prompt 字符串
-    //   b) llm.invoke(promptString) → 调用 llama.cpp API 获取回答
-    //   c) StringOutputParser.invoke(response) → 提取文本内容（去除 AIMessage 包装）
-    //
-    // StringOutputParser 的作用：
-    //   LLM 返回的是 AIMessage 对象，直接返回给用户不友好
-    //   StringOutputParser.invoke() 会调用 .content 方法提取纯文本
     const chain = prompt.pipe(this.llm).pipe(new StringOutputParser());
     const answer = await chain.invoke({ context, question });
 

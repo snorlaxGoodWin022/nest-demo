@@ -8,7 +8,10 @@ import { QueryUserDto } from './dto/query-user.dto';
 @Injectable()
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // 创建用户
   async create(createUserDto: CreateUserDto) {
+    // 往user表里新建数据
     const user = await this.prisma.user.create({
       data: {
         name: createUserDto.name,
@@ -19,10 +22,12 @@ export class UserService {
     });
     return { success: true, message: 'User created successfully', data: user };
   }
+
+  // 查找所有
   async findAll() {
     const users = await this.prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true },
-      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, email: true, role: true }, //筛选条件
+      orderBy: { createdAt: 'desc' }, // 排序
     });
     return {
       success: true,
@@ -31,6 +36,7 @@ export class UserService {
       data: users,
     };
   }
+
   async getUser(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -56,6 +62,7 @@ export class UserService {
       data: user,
     };
   }
+
   async deleteUser(id: number) {
     const user = await this.prisma.user.delete({ where: { id } });
     if (!user) {
@@ -66,6 +73,7 @@ export class UserService {
     }
     return { success: true, message: 'User deleted successfully' };
   }
+
   async updateUser(id: number, updateUserDto: UpdateUserDto) {
     const user = await this.prisma.user.update({
       where: { id },
@@ -78,6 +86,7 @@ export class UserService {
     });
     return { success: true, message: `用户${id}更新成功`, data: user };
   }
+
   async searchUser(query: QueryUserDto) {
     const page = Math.max(1, Number(query.page) || 1);
     const pageSize = Math.max(1, Number(query.pageSize) || 10);

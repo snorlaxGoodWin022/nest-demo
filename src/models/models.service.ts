@@ -13,29 +13,30 @@ export class ModelsService {
   // 模型：Llama-3.2-1B-Instruct-Q4_K_M
   private llm = new ChatOpenAI({
     model: config.llamaCpp.chatModel,
-    openAIApiKey: 'not-needed',
+    apiKey: 'not-needed',
     configuration: {
       baseURL: config.llamaCpp.baseUrl,
     },
     temperature: config.llamaCpp.temperature,
   });
 
-  //方式一：基础调用（等待完整回答）
-  //invoke 发送消息数组，等模型生成完整回答后一次性回答
+  //方式一: 最基本的调用
+  //invoke 发生消息数组,等模型生成完整回答后一次性回答
   async basicChat(message: string) {
     const response = await this.llm.invoke([new HumanMessage(message)]);
     return {
       question: message,
       answer: response.text,
       usage: response.usage_metadata,
+      response: response,
     };
   }
 
-  //方式二：设定system角色
+  //方式二:设定system角色
   async chatWithSystem(system: string, message: string) {
     const response = await this.llm.invoke([
-      new SystemMessage(system),
       new HumanMessage(message),
+      new SystemMessage(system),
     ]);
     return {
       system: system,
@@ -47,13 +48,17 @@ export class ModelsService {
 
   //方式三：流式调用（边生成边返回）
   async chatStream(message: string, res: Response) {
-    res.setHeader('Content-Type', 'text/event-stream');
+    //设置响应头
+    res.setHeader('Content-Type', 'text/event-stream'); //告诉浏览器这是 Server-Sent Events（SSE）流式响应
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
+    //调用 LLM 的 .stream() 方法返回一个异步可迭代对象,流式数据的来源
     const stream = await this.llm.stream([new HumanMessage(message)]);
 
+    //for await...of：异步循环，每收到一块数据就立即执行一次。
+    //res.write()：将数据块即时写入 HTTP 响应，而不是等所有数据攒完再发送。
     for await (const chunk of stream) {
       console.log('Received chunk:', chunk);
       res.write(
@@ -70,10 +75,21 @@ export class ModelsService {
 
   //方式4，使用pipe
   //pipe可以把多个组件串成链，输出是string
+  //可以把pipe理解为流水线
+  // async chatWithParser(message: string) {
+  //   //搭建流水线
+  //   // 通常在这类链式调用中，先执行invoke，其返回值再调用pipe
+  //   const chain = this.llm.pipe(new StringOutputParser());
+  //   const answer = await chain.invoke([new HumanMessage(message)]);
+  //   // answer 直接是字符串，不是 AIMessage 对象
+  //   return {
+  //     question: message,
+  //     answer: answer,
+  //   };
+  // }
   async chatWithParser(message: string) {
     const chain = this.llm.pipe(new StringOutputParser());
     const answer = await chain.invoke([new HumanMessage(message)]);
-    // answer 直接是字符串，不是 AIMessage 对象
     return {
       question: message,
       answer: answer,

@@ -1,18 +1,19 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
 import { ModelsService } from './models.service';
+
 import type { Response } from 'express';
 
-@Controller('models')
+@Controller('models') //路径前缀 /models
 export class ModelsController {
   constructor(private readonly modelsService: ModelsService) {}
 
-  @Post('chat')
+  @Post('chat') // 路由是 /models/chat  post方法
   async basicChat(@Body() body: { message: string }) {
     const { message } = body;
     return await this.modelsService.basicChat(message);
   }
 
-  @Post('chat-system')
+  @Post('chat-system') //路由是 /models/chat-system
   async chatWithSystem(@Body() body: { system: string; message: string }) {
     const { system, message } = body;
     return await this.modelsService.chatWithSystem(system, message);

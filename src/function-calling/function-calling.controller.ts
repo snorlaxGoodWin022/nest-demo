@@ -9,6 +9,10 @@ export class FunctionCallingController {
 
   @Post('run')
   run(@Body() body: { message: string }) {
-    return this.fcService.runFunctionCalling(body.message);
+    return this.fcService.runFunctionCalling(body.message) as Promise<{
+      userMessage: string;
+      toolCalls: unknown[];
+      finalAnswer: string | unknown;
+    }>;
   }
 }

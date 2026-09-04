@@ -11,18 +11,23 @@ import {
 import { DemoService } from './demo.service';
 import { CreateUserDto } from './dto/create-user.dto';
 
-@Controller('demo')
+@Controller('demo') //路由前缀是 demo
 export class DemoController {
+  //demoService
   constructor(private readonly demoService: DemoService) {}
-  @Get('hello')
+
+  @Get('hello') // get请求 路径是/demo/hello
   getHello() {
     return this.demoService.getHello();
   }
-  @Post('user')
+
+  @Post('user') // post请求 /demo/user
+  //@Body 作用是告诉框架拿请求里的body数据
   createUser(@Body() dto: CreateUserDto) {
     return this.demoService.createUser(dto);
   }
-  @Get('user/:id')
+
+  @Get('user/:id') //get请求 /demo/user/123
   getUserById(@Param('id') id: string) {
     return this.demoService.getUserById(id);
   }
