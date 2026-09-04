@@ -1,26 +1,22 @@
 import { ChatOpenAI } from '@langchain/openai'; // [Llama.cpp] llama-server HTTP 服务（与 Ollama API 兼容）
 // import { ChatOpenAI } from '@langchain/openai'; // [Ollama] 原始代码
-import { Injectable } from '@nestjs/common';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
 import {
-  RunnableSequence,
   RunnablePassthrough,
+  RunnableSequence,
 } from '@langchain/core/runnables';
+import { Injectable } from '@nestjs/common';
 import { config } from '../config';
 
 /**
  * ChainsService - 链式调用服务
- *
- * 核心概念：LangChain 的链式调用（Chains）
- * ======================================
  * LangChain 提供了 Runnable 接口来创建可组合的链式调用。
  * 主要组件：
- *
  * 1. RunnableSequence - 顺序执行多个步骤
  *    - 将多个 Runnable 按顺序连接
  *    - 前一步的输出自动作为下一步的输入
- *
+
  * 2. RunnablePassthrough - 透传数据
  *    - 将输入原封不动传递给下一步
  *    - 用于在复杂链中保留原始数据
@@ -46,13 +42,9 @@ import { config } from '../config';
  */
 @Injectable()
 export class ChainsService {
-  // ========== LLM 实例配置 ==========
-  // [Llama.cpp] 使用本地 llama-server.exe 启动的 HTTP 服务
-  // 服务地址：http://localhost:8081
-  // 模型：Llama-3.2-1B-Instruct-Q4_K_M
   private llm = new ChatOpenAI({
     model: config.llamaCpp.chatModel,
-    openAIApiKey: 'not-needed',
+    apiKey: 'not-needed',
     configuration: {
       baseURL: config.llamaCpp.baseUrl,
     },
@@ -61,133 +53,149 @@ export class ChainsService {
 
   // 输出解析器：将 LLM 的 AIMessage 转为纯字符串
   private parser = new StringOutputParser();
-
-  // ── 多步骤链：文章润色（分析问题 → 润色文章）──────────
-  // RunnableSequence：把多个步骤组合成顺序链
-  // RunnablePassthrough：透传输入值（用于在分叉步骤保留原始输入）
-
-  /**
-   * polishArticle - 文章润色核心方法
-   *
-   * 实现两步骤的链式调用：
-   * 1. 分析文章存在的问题（analyzeChain）
-   * 2. 根据问题列表润色文章（polishChain）
-   *
-   * @param article - 原始文章内容
-   * @returns 包含原始文章和润色后文章的对象
-   */
+  // ── Chain 一：简单线性链 ────────────────────────────────
+  // 场景：文章润色（分析 → 润色）
   async polishArticle(article: string) {
-    // ========== 步骤1：定义分析提示词 ==========
-    // ChatPromptTemplate.fromMessages() 创建多消息格式的提示词
-    // 格式：[角色, 消息内容]
-    // 角色：system（系统设定）、human（用户输入）
+    // 第一步：分析文章问题
     const analyzePrompt = ChatPromptTemplate.fromMessages([
-      ['system', '你是专业编辑，只输出问题列表，不要其他内容'],
-      ['human', '分析这篇文章存在的问题:\n\n{article}'],
+      ['system', '你是专业编辑，只输出问题列表，不要其他内容。'],
+      ['human', '分析这篇文章存在哪些问题：\n\n{article}'],
     ]);
 
-    // ========== 步骤2：定义润色提示词 ==========
-    // 注意这里有两个变量：{article}原文 和 {issues}问题列表
+    // 第二步：根据问题列表润色文章
     const polishPrompt = ChatPromptTemplate.fromMessages([
-      ['system', '你是专业编辑，根据问题列表润色原文，保持原意'],
-      ['human', '原文:\n{article},\n问题:{issues},\n\n请输出润色后的文章'],
+      ['system', '你是专业编辑，根据问题列表润色原文，保持原意。'],
+      [
+        'human',
+        '原文：\n{article}\n\n问题列表：\n{issues}\n\n请输出润色后的文章：',
+      ],
     ]);
 
-    // ========== 构建分析链 ==========
-    // analyzePrompt.pipe(this.llm).pipe(this.parser)
-    // 含义：提示词 → LLM处理 → 解析输出
-    // 管道操作 (.pipe) 将前一个 Runnable 的输出作为下一个的输入
+    // 第一条链：article → 分析问题 → issues 字符串
     const analyzeChain = analyzePrompt.pipe(this.llm).pipe(this.parser);
 
-    // ========== 构建完整链 ==========
-    // RunnableSequence.from() 创建顺序执行的链
-    // 输入 { article: "原文" } 会同时传递给两个分支：
-    //   - article: RunnablePassthrough() → 直接透传原文
-    //   - issues: analyzeChain → 分析得到问题列表
+    // 第二条链：{ article, issues } → 润色文章 → 最终文章
+    const polishChain = polishPrompt.pipe(this.llm).pipe(this.parser);
+
+    // ── 组装完整链：RunnableSequence.from([...]) ──────────────
+    // RunnableSequence 会按顺序依次执行数组里的每个步骤：
+    //   第 1 步的输出对象，会原封不动作为第 2 步的输入。
+    // 目标：把「原文 article」和「分析结果 issues」打包成同一个
+    // 对象 { article, issues }，交给第 2 步的润色链使用。
     const fullChain = RunnableSequence.from([
-      {
-        article: new RunnablePassthrough(), // 原文直接透传，不做任何处理
-        issues: analyzeChain, // 问题列表（来自分析链的输出）
-      },
-      // 第二步：使用 polishPrompt 处理，接收 {article, issues}
-      polishPrompt.pipe(this.llm).pipe(this.parser),
+      // ── 步骤一：RunnablePassthrough.assign 合并数据 ──
+      // RunnablePassthrough.assign({ 字段: 子链 }) 会做两件事：
+      //   1. 保留传入的原始对象（相当于浅拷贝展开 { ...输入 }）
+      //   2. 并行执行其中的子链，把返回值挂到对应的新字段上
+      // 效果：输入 { article } → 输出 { article, issues }
+      RunnablePassthrough.assign({
+        // analyzeChain 接收 { article }，返回问题列表字符串，存入 issues 字段
+        issues: analyzeChain,
+      }),
+
+      // ── 步骤二：polishChain 润色 ──
+      // 上一步输出的 { article, issues } 会整体传给 polishChain，
+      // 它的 Prompt 里有 {article} 和 {issues} 两个占位符，
+      // 正好被对象里的两个字段填满，所以不会报 Missing value。
+      polishChain,
     ]);
 
-    // ========== 执行链 ==========
-    // invoke() 是同步执行方法，输入 article 对象，返回润色后的结果
-    // 注意：需要传入对象 { article: string }，因为链的第一部分使用 RunnablePassthrough 透传 article
+    // 注意：invoke 必须传「对象」{ article }，不能只传字符串！
+    // 因为 analyzeChain / polishChain 的 Prompt 都依赖
+    // {article} 这个命名占位符，字符串无法提供它，
+    // 否则会触发 INVALID_PROMPT_INPUT / Missing value 错误。
     const result = await fullChain.invoke({ article });
 
-    // 返回原始文章和润色后的文章
-    return { origin: article, polished: result };
+    return { original: article, polished: result };
   }
 
+  // ── Chain 二：顺序链（Sequential Chain）────────────────
+  // 场景：博客生成（关键词 → 大纲 → 文章 → SEO 标题）
   async generateBlog(keywords: string, style: string) {
-    const outlineChain = ChatPromptTemplate.fromMessages([
+    // 第一步：生成大纲
+    const outlinePrompt = ChatPromptTemplate.fromMessages([
       ['system', '你是专业博客作者，只输出大纲，不要正文。'],
-      ['human', '根据关键词"{keywords}"生成一个{style}大纲。'],
-    ])
-      .pipe(this.llm)
-      .pipe(this.parser);
-
-    const articleChain = ChatPromptTemplate.fromMessages([
-      ['system', '你是专业博客作者，按照大纲写完整文章。'],
-      ['human', '请根据大纲{outline}生成一篇完整的博客文章'],
-    ])
-      .pipe(this.llm)
-      .pipe(this.parser);
-
-    const titleChain = ChatPromptTemplate.fromMessages([
-      ['system', '你是SEO专家，只输出5个候选标题。'],
-      ['human', '请根据文章生成3个吸引人的标题:\n\n{content}'],
+      [
+        'human',
+        '根据关键词"{keywords}"，写一篇{style}风格的博客大纲（3-5个章节）',
+      ],
     ]);
 
+    // 第二步：根据大纲生成文章
+    const articlePrompt = ChatPromptTemplate.fromMessages([
+      ['system', '你是专业博客作者，按照大纲写完整文章。'],
+      ['human', '大纲：\n{outline}\n\n请写出完整的博客文章：'],
+    ]);
+
+    // 第三步：生成 SEO 标题
+    const titlePrompt = ChatPromptTemplate.fromMessages([
+      ['system', '你是 SEO 专家，只输出5个候选标题，不要其他内容。'],
+      ['human', '根据以下文章，生成5个吸引点击的 SEO 标题：\n\n{article}'],
+    ]);
+
+    // 执行第一步：生成大纲
+    const outlineChain = outlinePrompt.pipe(this.llm).pipe(this.parser);
     const outline = await outlineChain.invoke({ keywords, style });
+
+    // 执行第二步：生成文章
+    const articleChain = articlePrompt.pipe(this.llm).pipe(this.parser);
     const article = await articleChain.invoke({ outline });
-    const titles = await titleChain.invoke({ content: article });
+
+    // 执行第三步：生成 SEO 标题
+    const titleChain = titlePrompt.pipe(this.llm).pipe(this.parser);
+    const titles = await titleChain.invoke({ article });
 
     return {
       keywords,
       style,
       outline,
       article,
-      seoTitle: titles,
+      seoTitles: titles,
     };
   }
 
+  // ── Chain 三：条件分支链（Router Chain）────────────────
+  // 场景：智能客服路由（根据问题类型路由到不同处理链）
   async smartRouter(question: string) {
-    //第一步：分类
-    const classifyChain = ChatPromptTemplate.fromMessages([
+    // 第一步：分类问题提示词
+    const classifyPrompt = ChatPromptTemplate.fromMessages([
       [
         'system',
-        `
-      分析用户问题，只输出分类标签：技术问题 -> TECH
-      退款问题 -> REFUND
-      投诉建议 -> COMPLAINT
-      其他 -> OTHER`,
+        `分析用户问题，只输出分类标签（不要其他内容）：
+- 技术问题 → 输出: TECH
+- 退款问题 → 输出: REFUND
+- 投诉建议 → 输出: COMPLAINT
+- 其他 → 输出: OTHER`,
       ],
       ['human', '{question}'],
-    ])
-      .pipe(this.llm)
-      .pipe(this.parser);
+    ]);
 
+    // 获取问题分类
+    const classifyChain = classifyPrompt.pipe(this.llm).pipe(this.parser);
     const category = (await classifyChain.invoke({ question })).trim();
 
-    //第二步，根据分类选对应的prompt
-    const systemMap: Record<string, string> = {
-      TECH: '你是技术支持专家，给出具体操作步骤。',
-      REFUND: '你是退款专员，引导完成退款流程，态度友好。',
+    // 第二步：根据分类选择不同 Prompt
+    const prompts = {
+      TECH: '你是技术支持专家，专业解答技术问题，给出具体操作步骤。',
+      REFUND: '你是退款专员，引导用户完成退款流程，态度友好。',
       COMPLAINT: '你是客户关系专员，认真对待投诉，给出解决方案。',
       OTHER: '你是通用客服，友好回答各类问题。',
     };
-    const systemPrompt = systemMap[category] || systemMap.OTHER;
 
-    const answerChain = ChatPromptTemplate.fromMessages([
+    const systemPrompt = prompts[category] || prompts.OTHER;
+
+    const answerPrompt = ChatPromptTemplate.fromMessages([
       ['system', systemPrompt],
       ['human', '{question}'],
     ]);
 
+    const answerChain = answerPrompt.pipe(this.llm).pipe(this.parser);
     const answer = await answerChain.invoke({ question });
-    return { question, category, answer };
+
+    return {
+      question,
+      category,
+      answer,
+    };
   }
 }
