@@ -1,15 +1,15 @@
 import { ChatOpenAI } from '@langchain/openai'; // [Llama.cpp] llama-server HTTP 服务（与 Ollama API 兼容）
 // import { ChatOpenAI } from '@langchain/openai'; // [Ollama] 原始代码
-import { Injectable } from '@nestjs/common';
-import { config } from 'src/config';
-import { z } from 'zod';
-import { tool } from '@langchain/core/tools';
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
   ToolMessage,
-  AIMessage,
 } from '@langchain/core/messages';
+import { tool } from '@langchain/core/tools';
+import { Injectable } from '@nestjs/common';
+import { config } from 'src/config';
+import { z } from 'zod';
 
 @Injectable()
 export class AgentsService {
@@ -37,7 +37,7 @@ export class AgentsService {
   // 模型：Llama-3.2-1B-Instruct-Q4_K_M
   private llm = new ChatOpenAI({
     model: config.llamaCpp.chatModel,
-    openAIApiKey: 'not-needed',
+    apiKey: 'not-needed',
     configuration: {
       baseURL: config.llamaCpp.baseUrl,
     },
@@ -231,6 +231,9 @@ export class AgentsService {
       }
 
       // 模型调用工具,依次执行所有工具调用
+      /*因为模型一轮可能发 N 个工具调用（并行调用），所以必须遍历 N 次，
+      每次都执行 + 回传对应 tool_call_id 的结果，否则模型拿到的信息就不完整。
+       */
       for (const toolCall of response.tool_calls) {
         steps.push(
           `[调用工具] ${toolCall.name}  (${JSON.stringify(toolCall.args)})`,
@@ -255,9 +258,14 @@ export class AgentsService {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        // 调用工具 + 告诉 TypeScript 返回的是字符串 。
+        /**
+         * toolFn 是 tool() 包装出来的 Runnable 对象，
+         * 必须按 LangChain 规矩用 .invoke(参数) 调用，不能当普通函数直接 call。
+         */
         const toolResult = (await toolFn.invoke(
-          toolCall.args as Record<string, unknown>,
-        )) as string;
+          toolCall.args as Record<string, unknown>, // ① 把参数类型"抹平"成对象
+        )) as string; // ② 断言结果一定是 string
         steps.push(`✅ [工具结果] ${toolResult}`);
         console.log(`[工具结果] ${toolResult}`);
 
@@ -273,6 +281,10 @@ export class AgentsService {
     }
 
     // 获取最后一条回答
+    /**
+     * 因为最后一个 不一定是 AI 消息 。比如循环跑满 6 轮还没收敛，
+     * 最后一条可能是 ToolMessage ，那直接取就拿到了工具结果而不是 AI 回答。
+     */
     const lastAI = [...messages].reverse().find((m) => m instanceof AIMessage);
     const answer = lastAI
       ? this.extractTextContent(
